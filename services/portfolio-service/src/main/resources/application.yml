@@ -1,0 +1,43 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: portfolio-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/wmp?currentSchema=portfolio_schema}
+    username: ${SPRING_DATASOURCE_USERNAME:portfolio_svc_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:localdev123}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      minimum-idle: 2
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: portfolio_schema
+        format_sql: false
+    open-in-view: false
+  flyway:
+    enabled: true
+    schemas: portfolio_schema
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+jwt:
+  secret: ${JWT_SECRET:myDefaultSuperSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm}
+  expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: portfolio-service

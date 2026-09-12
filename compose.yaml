@@ -1,0 +1,110 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wmp-postgres
+    environment:
+      POSTGRES_DB: wmp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - wmp-network
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U postgres -d wmp
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  portfolio-service:
+    build:
+      context: ./services/portfolio-service
+      dockerfile: Dockerfile
+    container_name: wmp-portfolio
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/wmp?currentSchema=portfolio_schema"
+      SPRING_DATASOURCE_USERNAME: portfolio_svc_user
+      SPRING_DATASOURCE_PASSWORD: localdev123
+      JWT_SECRET: myDefaultSuperSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm
+      SERVER_PORT: "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - wmp-network
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: wmp-auth
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: auth_svc_user
+      DB_PASSWORD: localdev123
+      DB_NAME: wmp
+      DB_SCHEMA: auth_schema
+      SERVER_PORT: "8081"
+      JWT_SECRET: myDefaultSuperSecretKeyThatIsAtLeast256BitsLongForHS256Algorithm
+      PORTFOLIO_SERVICE_URL: http://portfolio-service:8080
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      portfolio-service:
+        condition: service_started
+    networks:
+      - wmp-network
+    restart: unless-stopped
+
+  analytics-service:
+    build:
+      context: ./services/analytics-service
+      dockerfile: Dockerfile
+    container_name: wmp-analytics
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://analytics_svc_user:localdev123@postgres:5432/wmp"
+      DB_SCHEMA: analytics_schema
+      LOG_LEVEL: INFO
+      ENVIRONMENT: production
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - wmp-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+    container_name: wmp-frontend
+    ports:
+      - "8088:80"
+    depends_on:
+      - auth-service
+      - portfolio-service
+      - analytics-service
+    networks:
+      - wmp-network
+    restart: unless-stopped
+
+networks:
+  wmp-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
